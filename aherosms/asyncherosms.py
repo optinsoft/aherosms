@@ -74,7 +74,7 @@ class AsyncHeroSms:
             self.country_iso_dict[item[1]] = item[0]
 
     @staticmethod
-    def raiseHeroSmsException(code: str, respList: list = [], noSmsCode: str = ''):
+    def raiseHeroSmsException(code: str, respList: list = [], noSmsCode: str = '', errorMsg: str = '', info: str = ''):
         if len(noSmsCode) > 0 and code == noSmsCode:
             raise NoSMSException("No SMS")
         if "EARLY_CANCEL_DENIED" == code:
@@ -82,14 +82,14 @@ class AsyncHeroSms:
         if "NO_NUMBERS" == code:
             raise NoNumbersException("No numbers")
         if "WRONG_MAX_PRICE" == code:
-            raise WrongMaxPriceException(f'Wrong max. price {":".join(respList[1:])}')
+            raise WrongMaxPriceException(f'Wrong max. price {":".join(respList[1:]) or info}')
         if "BANNED" == code:
-            raise BannedException(f'Banned {":".join(respList[1:])}')
+            raise BannedException(f'Banned {":".join(respList[1:]) or info }')
         if "CHANNELS_LIMIT" == code:
             raise ChannelsLimitException("Channels limit")
         if "STATUS_CANCEL" == code:
             raise CanceledException('Canceled')                        
-        raise AsyncHeroSmsException(f'Error "{code}": {":".join(respList)}')
+        raise AsyncHeroSmsException(f'Error "{code}": {":".join(respList) or errorMsg}')
 
     @staticmethod
     def checkResponse(respList: list, successCode: str, noSmsCode: str):
@@ -105,6 +105,15 @@ class AsyncHeroSms:
             else:
                 raise AsyncHeroSmsException(f"Empty response")
         return respList
+    
+    @staticmethod
+    def checkJsonResponse(respJson):
+        if 'error' == respJson.get('status'):
+            code = respJson.get('message', 'error')
+            errorMsg = respJson.get('errorMsg', '')
+            info = respJson.get('info', '')
+            AsyncHeroSms.raiseHeroSmsException(code, errorMsg=errorMsg, info=info)
+        return respJson
 
     def logRequest(self, query, response: dict):
         if not self.logger is None:
@@ -174,8 +183,8 @@ class AsyncHeroSms:
                         AsyncHeroSms.raiseHeroSmsException(respList[0], respList)
                     respJson = json.loads(respText)
                 except ValueError as e:
-                    raise AsyncHeroSmsException(f"Request failed: {str(e)}")
-                return respJson
+                    raise AsyncHeroSmsException(f"Request failed: {str(e)}")                
+                return AsyncHeroSms.checkJsonResponse(respJson)
 
     async def getNumber(self, service: str, country_code: str, max_price: str = '',
                         operator: str = '', phone_exception: str = ''):
